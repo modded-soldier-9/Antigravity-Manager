@@ -133,7 +133,7 @@ pub struct ProxyToken {
     pub protected_models: HashSet<String>, // [NEW #621]
     pub health_score: f32,                 // [NEW] 健康分数 (0.0 - 1.0)
     pub reset_time: Option<i64>,           // [NEW] 配额刷新时间戳（用于排序优化）
-    pub weekly_reset_time: Option<i64>,    // [NEW] 周配额刷新时间戳（用于临期优先调度 EDF，防止周期重置作废配额）
+    pub weekly_reset_time: Option<i64>, // [NEW] 周配额刷新时间戳（用于临期优先调度 EDF，防止周期重置作废配额）
     pub validation_blocked: bool, // [NEW] Check for validation block (VALIDATION_REQUIRED temporary block)
     pub validation_blocked_until: i64, // [NEW] Timestamp until which the account is blocked
     pub validation_url: Option<String>, // [NEW] Validation URL (#1522)
@@ -1850,12 +1850,18 @@ impl TokenManager {
         // P2C 临期感知选择：若一候选账号存在临期配额 (<= 24h 重置且 q > 0)，优先抽中该临期账号防止配额作废
         let now_ts = chrono::Utc::now().timestamp();
         let get_imminent = |t: &ProxyToken, q: i32| -> Option<i64> {
-            if q <= 0 { return None; }
+            if q <= 0 {
+                return None;
+            }
             if let Some(w) = t.weekly_reset_time {
-                if w > now_ts && (w - now_ts) <= 86400 { return Some(w); }
+                if w > now_ts && (w - now_ts) <= 86400 {
+                    return Some(w);
+                }
             }
             if let Some(r) = t.reset_time {
-                if r > now_ts && (r - now_ts) <= 7200 { return Some(r); }
+                if r > now_ts && (r - now_ts) <= 7200 {
+                    return Some(r);
+                }
             }
             None
         };
@@ -1864,10 +1870,22 @@ impl TokenManager {
         let imm2 = get_imminent(c2, q2);
 
         let selected = match (imm1, imm2) {
-            (Some(ts1), Some(ts2)) => if ts1 <= ts2 { c1 } else { c2 },
+            (Some(ts1), Some(ts2)) => {
+                if ts1 <= ts2 {
+                    c1
+                } else {
+                    c2
+                }
+            }
             (Some(_), None) => c1,
             (None, Some(_)) => c2,
-            (None, None) => if q1 >= q2 { c1 } else { c2 },
+            (None, None) => {
+                if q1 >= q2 {
+                    c1
+                } else {
+                    c2
+                }
+            }
         };
 
         tracing::debug!(
@@ -2270,7 +2288,7 @@ impl TokenManager {
                 }
                 (Some(_), None) => return std::cmp::Ordering::Less, // a 临期，优先消耗 a
                 (None, Some(_)) => return std::cmp::Ordering::Greater, // b 临期，优先消耗 b
-                (None, None) => {} // 皆非临期，走正常配额比对
+                (None, None) => {}                                  // 皆非临期，走正常配额比对
             }
 
             // Priority 1: 目标模型的 quota (higher is better) -> 保护低配额账号
@@ -4195,7 +4213,10 @@ impl TokenManager {
             if let Some(buckets) = group.get("buckets").and_then(|b| b.as_array()) {
                 for bucket in buckets {
                     let window = bucket.get("window").and_then(|w| w.as_str()).unwrap_or("");
-                    let bucket_id = bucket.get("bucket_id").and_then(|b| b.as_str()).unwrap_or("");
+                    let bucket_id = bucket
+                        .get("bucket_id")
+                        .and_then(|b| b.as_str())
+                        .unwrap_or("");
                     let win_lower = window.to_lowercase();
                     let bid_lower = bucket_id.to_lowercase();
 
@@ -4209,7 +4230,9 @@ impl TokenManager {
                             if !reset_str.is_empty() {
                                 if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(reset_str) {
                                     let ts = dt.timestamp();
-                                    if earliest_weekly_ts.is_none() || ts < earliest_weekly_ts.unwrap() {
+                                    if earliest_weekly_ts.is_none()
+                                        || ts < earliest_weekly_ts.unwrap()
+                                    {
                                         earliest_weekly_ts = Some(ts);
                                     }
                                 }
@@ -6775,13 +6798,17 @@ mod tests {
         });
 
         let weekly_ts = manager.extract_weekly_reset_time(&account_json);
-        assert!(weekly_ts.is_some(), "必须成功从 7d/weekly 桶中提取周配额刷新时间戳");
+        assert!(
+            weekly_ts.is_some(),
+            "必须成功从 7d/weekly 桶中提取周配额刷新时间戳"
+        );
         let dt = chrono::DateTime::parse_from_rfc3339("2026-10-14T03:00:00Z").unwrap();
         assert_eq!(weekly_ts.unwrap(), dt.timestamp());
     }
 
     #[tokio::test]
-    async fn test_edf_sorting_prioritizes_expiring_weekly_account_over_higher_quota_distant_reset() {
+    async fn test_edf_sorting_prioritizes_expiring_weekly_account_over_higher_quota_distant_reset()
+    {
         let temp_dir = tempfile::tempdir().unwrap();
         let manager = TokenManager::new(temp_dir.path().to_path_buf());
         let now_ts = chrono::Utc::now().timestamp();
@@ -6804,8 +6831,16 @@ mod tests {
         token_b.model_quotas = quotas_b;
         token_b.weekly_reset_time = Some(now_ts + 432_000); // 5 天后
 
-        std::fs::write(temp_dir.path().join("acc_expiring.json"), r#"{"disabled":false}"#).unwrap();
-        std::fs::write(temp_dir.path().join("acc_distant.json"), r#"{"disabled":false}"#).unwrap();
+        std::fs::write(
+            temp_dir.path().join("acc_expiring.json"),
+            r#"{"disabled":false}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            temp_dir.path().join("acc_distant.json"),
+            r#"{"disabled":false}"#,
+        )
+        .unwrap();
 
         token_a.account_path = temp_dir.path().join("acc_expiring.json");
         token_b.account_path = temp_dir.path().join("acc_distant.json");
@@ -6852,8 +6887,16 @@ mod tests {
         token_b.model_quotas = quotas_b;
         token_b.weekly_reset_time = Some(now_ts + 28800); // 8 小时后
 
-        std::fs::write(temp_dir.path().join("acc_sooner.json"), r#"{"disabled":false}"#).unwrap();
-        std::fs::write(temp_dir.path().join("acc_later.json"), r#"{"disabled":false}"#).unwrap();
+        std::fs::write(
+            temp_dir.path().join("acc_sooner.json"),
+            r#"{"disabled":false}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            temp_dir.path().join("acc_later.json"),
+            r#"{"disabled":false}"#,
+        )
+        .unwrap();
 
         token_a.account_path = temp_dir.path().join("acc_sooner.json");
         token_b.account_path = temp_dir.path().join("acc_later.json");
@@ -6883,7 +6926,8 @@ mod tests {
         // 账号 A: 40% 配额，周配额在 4 天后重置 (非临期)
         let mut quotas_a = HashMap::new();
         quotas_a.insert(target_model.to_string(), 40);
-        let mut token_a = create_test_token("low_distant@test.com", Some("PRO"), 1.0, None, Some(40));
+        let mut token_a =
+            create_test_token("low_distant@test.com", Some("PRO"), 1.0, None, Some(40));
         token_a.account_id = "acc_low".to_string();
         token_a.model_quotas = quotas_a;
         token_a.weekly_reset_time = Some(now_ts + 345_600); // 4 天后
@@ -6891,13 +6935,22 @@ mod tests {
         // 账号 B: 95% 配额，周配额在 6 天后重置 (非临期)
         let mut quotas_b = HashMap::new();
         quotas_b.insert(target_model.to_string(), 95);
-        let mut token_b = create_test_token("high_distant@test.com", Some("PRO"), 1.0, None, Some(95));
+        let mut token_b =
+            create_test_token("high_distant@test.com", Some("PRO"), 1.0, None, Some(95));
         token_b.account_id = "acc_high".to_string();
         token_b.model_quotas = quotas_b;
         token_b.weekly_reset_time = Some(now_ts + 518_400); // 6 天后
 
-        std::fs::write(temp_dir.path().join("acc_low.json"), r#"{"disabled":false}"#).unwrap();
-        std::fs::write(temp_dir.path().join("acc_high.json"), r#"{"disabled":false}"#).unwrap();
+        std::fs::write(
+            temp_dir.path().join("acc_low.json"),
+            r#"{"disabled":false}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            temp_dir.path().join("acc_high.json"),
+            r#"{"disabled":false}"#,
+        )
+        .unwrap();
 
         token_a.account_path = temp_dir.path().join("acc_low.json");
         token_b.account_path = temp_dir.path().join("acc_high.json");
@@ -6912,7 +6965,10 @@ mod tests {
             .await
             .expect("Token acquisition should succeed");
 
-        assert_eq!(selected_id, "acc_high", "非临期时应保持高配额优先以保护低配额账号");
+        assert_eq!(
+            selected_id, "acc_high",
+            "非临期时应保持高配额优先以保护低配额账号"
+        );
         assert_eq!(email, "high_distant@test.com");
     }
 
@@ -6927,7 +6983,8 @@ mod tests {
         // 账号 A: 0% 配额，即便 1 小时后重置，也绝不能因为临期被选出（没有额度）
         let mut quotas_a = HashMap::new();
         quotas_a.insert(target_model.to_string(), 0);
-        let mut token_a = create_test_token("zero_expiring@test.com", Some("PRO"), 1.0, None, Some(0));
+        let mut token_a =
+            create_test_token("zero_expiring@test.com", Some("PRO"), 1.0, None, Some(0));
         token_a.account_id = "acc_zero".to_string();
         token_a.model_quotas = quotas_a;
         token_a.weekly_reset_time = Some(now_ts + 3600); // 1 小时后
@@ -6940,8 +6997,16 @@ mod tests {
         token_b.model_quotas = quotas_b;
         token_b.weekly_reset_time = Some(now_ts + 432_000); // 5 天后
 
-        std::fs::write(temp_dir.path().join("acc_zero.json"), r#"{"disabled":false}"#).unwrap();
-        std::fs::write(temp_dir.path().join("acc_has.json"), r#"{"disabled":false}"#).unwrap();
+        std::fs::write(
+            temp_dir.path().join("acc_zero.json"),
+            r#"{"disabled":false}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            temp_dir.path().join("acc_has.json"),
+            r#"{"disabled":false}"#,
+        )
+        .unwrap();
 
         token_a.account_path = temp_dir.path().join("acc_zero.json");
         token_b.account_path = temp_dir.path().join("acc_has.json");
@@ -6955,7 +7020,10 @@ mod tests {
             .await
             .expect("Token acquisition should succeed");
 
-        assert_eq!(selected_id, "acc_has", "0% 配额账号即便临期也绝不得被提权选中");
+        assert_eq!(
+            selected_id, "acc_has",
+            "0% 配额账号即便临期也绝不得被提权选中"
+        );
         assert_eq!(email, "has_quota@test.com");
     }
 }
