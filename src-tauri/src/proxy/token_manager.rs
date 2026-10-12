@@ -1817,9 +1817,7 @@ impl TokenManager {
             .iter()
             .any(|t| t.model_quotas.get(normalized_target).copied().unwrap_or(0) > 0);
         if has_positive_model_quota {
-            available.retain(|t| {
-                t.model_quotas.get(normalized_target).copied().unwrap_or(0) > 0
-            });
+            available.retain(|t| t.model_quotas.get(normalized_target).copied().unwrap_or(0) > 0);
         }
 
         if available.len() == 1 {
@@ -2346,8 +2344,11 @@ impl TokenManager {
                                 <= 0;
                             let has_healthy_alternative = tokens_snapshot.iter().any(|t| {
                                 t.account_id != preferred_token.account_id
-                                    && !self.rate_limit_tracker.is_rate_limited(&t.account_id, Some(&normalized_target))
-                                    && t.model_quotas.get(&normalized_target).copied().unwrap_or(0) > 0
+                                    && !self
+                                        .rate_limit_tracker
+                                        .is_rate_limited(&t.account_id, Some(&normalized_target))
+                                    && t.model_quotas.get(&normalized_target).copied().unwrap_or(0)
+                                        > 0
                             });
 
                             if has_zero_quota && has_healthy_alternative {
@@ -2479,7 +2480,9 @@ impl TokenManager {
                         let has_healthy_alternative = tokens_snapshot.iter().any(|t| {
                             t.account_id != bound_token.account_id
                                 && !attempted.contains(&t.account_id)
-                                && !self.rate_limit_tracker.is_rate_limited(&t.account_id, Some(&normalized_target))
+                                && !self
+                                    .rate_limit_tracker
+                                    .is_rate_limited(&t.account_id, Some(&normalized_target))
                                 && t.model_quotas.get(&normalized_target).copied().unwrap_or(0) > 0
                         });
 
@@ -2554,8 +2557,15 @@ impl TokenManager {
                                 let has_healthy_alt = tokens_snapshot.iter().any(|t| {
                                     &t.account_id != account_id
                                         && !attempted.contains(&t.account_id)
-                                        && !self.rate_limit_tracker.is_rate_limited(&t.account_id, Some(&normalized_target))
-                                        && t.model_quotas.get(&normalized_target).copied().unwrap_or(0) > 0
+                                        && !self.rate_limit_tracker.is_rate_limited(
+                                            &t.account_id,
+                                            Some(&normalized_target),
+                                        )
+                                        && t.model_quotas
+                                            .get(&normalized_target)
+                                            .copied()
+                                            .unwrap_or(0)
+                                            > 0
                                 });
 
                                 if last_zero_quota && has_healthy_alt {
@@ -6800,7 +6810,9 @@ mod tests {
         manager.tokens.insert(acc_alt_id.to_string(), token2);
 
         // 设置固定优先账号为 acc_pref_id
-        manager.set_preferred_account(Some(acc_pref_id.to_string())).await;
+        manager
+            .set_preferred_account(Some(acc_pref_id.to_string()))
+            .await;
 
         // 获取 Token：优先账号目标模型为 0% 且存在具备 80% 的替代账号时，
         // 绝不得死磕 0% 账号导致 429，必须无感自动回退至池中可用账号 (Fixes #3639)
@@ -6808,7 +6820,9 @@ mod tests {
         let (_token, _project_id, email, selected_id, _wait) = manager
             .get_token_filtered("chat", false, None, target_model, &excluded)
             .await
-            .expect("Preferred account with 0% quota must seamlessly fallback to available account");
+            .expect(
+                "Preferred account with 0% quota must seamlessly fallback to available account",
+            );
 
         assert_eq!(selected_id, acc_alt_id, "必须自动选择具备额度的备选账号");
         assert_eq!(email, "alt@test.com");
