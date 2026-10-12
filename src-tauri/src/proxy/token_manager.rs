@@ -1980,10 +1980,13 @@ impl TokenManager {
                         // 且距离请求截止时间 (deadline) 仍有充裕预算，则等待冷却时长后自动重选，
                         // 绝不直接向前端或客户端抛出 503 SERVICE_UNAVAILABLE 导致生图失败！
                         if let Some(wait_sec) =
-                            crate::proxy::handlers::common::extract_retry_after_seconds(&selection_error)
+                            crate::proxy::handlers::common::extract_retry_after_seconds(
+                                &selection_error,
+                            )
                         {
                             let wait_dur = std::time::Duration::from_secs(wait_sec.clamp(1, 10));
-                            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+                            let remaining =
+                                deadline.saturating_duration_since(tokio::time::Instant::now());
                             if remaining > wait_dur {
                                 tracing::info!(
                                     "[ImageScheduler] All accounts in transient cooldown ({}s), waiting {}s within timeout budget to rescue image request",
