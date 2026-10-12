@@ -3289,8 +3289,9 @@ impl TokenManager {
                 .iter()
                 .find(|m| {
                     let name = m.get("name").and_then(|v| v.as_str()).unwrap_or("");
-                    let norm_name = crate::proxy::common::model_mapping::normalize_to_standard_id(name)
-                        .unwrap_or_else(|| name.to_string());
+                    let norm_name =
+                        crate::proxy::common::model_mapping::normalize_to_standard_id(name)
+                            .unwrap_or_else(|| name.to_string());
                     norm_name == norm_target || name == target
                 })
                 .and_then(|m| {
@@ -3309,9 +3310,9 @@ impl TokenManager {
         } else {
             // 全账号级：仅当所有模型均为 0% 时才提取最早 reset_time
             let all_zero = !models.is_empty()
-                && models.iter().all(|m| {
-                    m.get("percentage").and_then(|v| v.as_i64()).unwrap_or(100) <= 0
-                });
+                && models
+                    .iter()
+                    .all(|m| m.get("percentage").and_then(|v| v.as_i64()).unwrap_or(100) <= 0);
 
             if all_zero {
                 models
@@ -3352,7 +3353,9 @@ impl TokenManager {
             true
         };
 
-        if let Some(reset_time_str) = self.get_quota_reset_time(account_id, model_to_lock.as_deref()) {
+        if let Some(reset_time_str) =
+            self.get_quota_reset_time(account_id, model_to_lock.as_deref())
+        {
             tracing::info!(
                 "找到账号 {} [模型 {:?}] 的配额刷新时间: {} (cap_to_max: {})",
                 account_id,
@@ -3422,21 +3425,25 @@ impl TokenManager {
         match crate::modules::quota::fetch_quota(&access_token, email, Some(&account_id)).await {
             Ok((quota_data, _project_id)) => {
                 // 3. 从最新配额中提取匹配模型的 reset_time
-                let normalized_model = model.as_deref().and_then(|m| {
-                    crate::proxy::common::model_mapping::normalize_to_standard_id(m)
-                });
+                let normalized_model = model
+                    .as_deref()
+                    .and_then(|m| crate::proxy::common::model_mapping::normalize_to_standard_id(m));
                 let model_to_lock = normalized_model.or(model);
 
                 let matched_reset = if let Some(ref target) = model_to_lock {
-                    let norm_target = crate::proxy::common::model_mapping::normalize_to_standard_id(target)
-                        .unwrap_or_else(|| target.to_string());
+                    let norm_target =
+                        crate::proxy::common::model_mapping::normalize_to_standard_id(target)
+                            .unwrap_or_else(|| target.to_string());
 
                     // 精准查找当前报错的模型
                     quota_data
                         .models
                         .iter()
                         .find(|m| {
-                            let norm_m = crate::proxy::common::model_mapping::normalize_to_standard_id(&m.name)
+                            let norm_m =
+                                crate::proxy::common::model_mapping::normalize_to_standard_id(
+                                    &m.name,
+                                )
                                 .unwrap_or_else(|| m.name.clone());
                             norm_m == norm_target || m.name == *target
                         })
